@@ -1,0 +1,85 @@
+import sqlite3
+from datetime import date
+
+# DB anlegen / öffnen
+conn = sqlite3.connect("finanzcockpit.db")
+c = conn.cursor()
+
+# Tabellen anlegen
+c.execute("""
+CREATE TABLE IF NOT EXISTS assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    typ TEXT NOT NULL CHECK(typ IN ('konto', 'bargeld', 'depot', 'tresor', 'bausparen')),
+    api_tracking BOOLEAN DEFAULT 0
+);
+""")
+
+c.execute("""
+CREATE TABLE IF NOT EXISTS asset_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id INTEGER NOT NULL,
+    datum DATE NOT NULL,
+    wert REAL NOT NULL,
+    details TEXT,
+    FOREIGN KEY(asset_id) REFERENCES assets(id)
+);
+""")
+
+c.execute("""
+CREATE TABLE IF NOT EXISTS depot_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_entry_id INTEGER NOT NULL,
+    fonds_name TEXT NOT NULL,
+    anteile REAL NOT NULL,
+    aktueller_wert REAL NOT NULL,
+    FOREIGN KEY(asset_entry_id) REFERENCES asset_entries(id)
+);
+""")
+
+conn.commit()
+
+# Beispiel-Daten in assets einfügen (falls leer)
+c.execute("SELECT COUNT(*) FROM assets")
+if c.fetchone()[0] == 0:
+    assets = [
+        ('Commerzbank Konto', 'konto', 0),
+        ('Sparkassen Konto', 'konto', 0),
+        ('Commerzbank Depot', 'depot', 0),
+        ('Sparkassen (Deka) Depot', 'depot', 0),
+        ('Sparkassen (LBS) Bausparvertrag', 'bausparen', 0),
+        ('Savings', 'bargeld', 0),
+        ('Phenorama', 'bargeld', 0),
+        ('Vapiano', 'bargeld', 0),
+        ('Tresor', 'tresor', 1),  # API Tracking später
+    ]
+    c.executemany("INSERT INTO assets (name, typ, api_tracking) VALUES (?, ?, ?)", assets)
+    conn.commit()
+
+# Beispiel-Daten in asset_entries einfügen (heutiger Stand, falls leer)
+c.execute("SELECT COUNT(*) FROM asset_entries")
+if c.fetchone()[0] == 0:
+    c.execute("SELECT id, name FROM assets")
+    assets_list = c.fetchall()
+    today = date.today().isoformat()
+
+    beispiel_werte = {
+        'Commerzbank Konto': 3200.50,
+        'Sparkassen Konto': 2500.00,
+        'Commerzbank Depot': 15000.75,
+        'Sparkassen (Deka) Depot': 12000.00,
+        'Sparkassen (LBS) Bausparvertrag': 8000.00,
+        'Savings': 500.00,
+        'Phenorama': 120.00,
+        'Vapiano': 250.00,
+        'Tresor': 10000.00,
+    }
+
+    for asset_id, name in assets_list:
+        wert = beispiel_werte.get(name, 0)
+        c.execute("INSERT INTO asset_entries (asset_id, datum, wert) VALUES (?, ?, ?)", (asset_id, today, wert))
+    conn.commit()
+
+conn.close()
+
+print("finanzcockpit.db wurde erfolgreich erstellt und mit Beispieldaten gefüllt.")
